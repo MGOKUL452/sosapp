@@ -1,0 +1,139 @@
+npx react-native init SOSApp
+cd SOSApp
+npm install @react-native-firebase/app @react-native-firebase/auth @react-native-firebase/firestore @react-native-firebase/storage @react-native-firebase/messaging
+npm install @react-native-community/geolocation react-native-permissions react-native-camera twilio
+
+USER’S INFORMATION: (JAVASCRIPT)
+CODE:
+import firestore from '@react-native-firebase/firestore';
+import { TextInput, Button, View } from 'react-native';
+
+function UserInfoForm({ navigation }) {
+  const [name, setName] = useState('');
+  const [address, setAddress] = useState('');
+  const [phone, setPhone] = useState('');
+  const [guardianName, setGuardianName] = useState('');
+  const [guardianPhone, setGuardianPhone] = useState('');
+
+  const saveUserInfo = () => {
+    firestore().collection('users').add({
+      name,
+      address,
+      phone,
+      guardianName,
+      guardianPhone,
+    }).then(() => {
+      navigation.navigate('Home');
+    }).catch(error => console.error(error));
+  };
+
+  return (
+    <View>
+      <TextInput placeholder="Name" value={name} onChangeText={setName} />
+      <TextInput placeholder="Address" value={address} onChangeText={setAddress} />
+      <TextInput placeholder="Phone" value={phone} onChangeText={setPhone} />
+      <TextInput placeholder="Guardian Name" value={guardianName} onChangeText={setGuardianName} />
+      <TextInput placeholder="Guardian Phone" value={guardianPhone} onChangeText={setGuardianPhone} />
+      <Button title="Save" onPress={saveUserInfo} />
+    </View>
+  );
+}
+
+REQUESTING ACCESS: (JAVASCRIPT)
+CODE:
+ import { PermissionsAndroid } from 'react-native';
+import { request, PERMISSIONS } from 'react-native-permissions';
+
+async function requestPermissions() {
+  await request(PERMISSIONS.ANDROID.CAMERA);
+  await request(PERMISSIONS.ANDROID.RECORD_AUDIO);
+  await request(PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION);
+}
+
+HOME PAGE: (JAVASCRPT)
+CODE: 
+import { Button, View } from 'react-native';
+
+function Home({ userId }) {
+  const sendSOS = () => {
+    // Trigger the SMS, location sharing, and video recording here
+  };
+
+  return (
+    <View>
+      <Button title="SOS" onPress={sendSOS} />
+    </View>
+  );
+}
+SENDING SMS : (JAVASCRIPT)
+CODE:
+import Geolocation from '@react-native-community/geolocation';
+import firestore from '@react-native-firebase/firestore';
+import twilio from 'twilio';
+
+const accountSid = 'your_account_sid';
+const authToken = 'your_auth_token';
+const client = twilio(accountSid, authToken);
+
+function sendSOS(userId) {
+  Geolocation.getCurrentPosition(
+    (position) => {
+      firestore().collection('users').doc(userId).get().then(userDoc => {
+        const { name, guardianPhone } = userDoc.data();
+        const message = `User ${name} is in danger. Location: ${position.coords.latitude}, ${position.coords.longitude}`;
+        
+        client.messages.create({
+          body: message,
+          from: '+1234567890',
+          to: guardianPhone
+        });
+      });
+    },
+    (error) => console.error(error),
+    { enableHighAccuracy: true, timeout: 20000, maximumAge: 1000 }
+  );
+}
+
+STARTING VIDEO RECORDING AND STREAMING : (JAVASCRIPT)
+CODE:
+import { RNCamera } from 'react-native-camera';
+import storage from '@react-native-firebase/storage';
+
+function recordAndUploadVideo() {
+  let cameraRef = useRef(null);
+  
+  const startRecording = async () => {
+    if (cameraRef) {
+      const options = { quality: RNCamera.Constants.VideoQuality['720p'] };
+      const { uri } = await cameraRef.recordAsync(options);
+      const storageRef = storage().ref(`videos/${Date.now()}.mp4`);
+      await storageRef.putFile(uri);
+    }
+  };
+
+  return (
+    <RNCamera
+      ref={ref => { cameraRef = ref; }}
+      style={{ flex: 1 }}
+      type={RNCamera.Constants.Type.back}
+      captureAudio={true}
+    >
+      <Button title="Start Recording" onPress={startRecording} />
+    </RNCamera>
+  );
+}
+
+STORING THE VIDEO AND SENDING THE LINK : (JAVASRIPT)
+CODE:
+function shareVideoLink(storageRef, guardianPhone) {
+  storageRef.getDownloadURL().then(url => {
+    const message = `Emergency video: ${url}`;
+    client.messages.create({
+      body: message,
+      from: '+1234567890',
+      to: guardianPhone
+    });
+  });
+}
+
+
